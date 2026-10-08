@@ -1,0 +1,26 @@
+{
+  "name": "asset-hub-dex-api",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "start": "node src/index.ts",
+    "typecheck": "tsc",
+    "postinstall": "papi"
+  },
+  "type": "module",
+  "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "@polkadot-api/descriptors": "file:.papi/descriptors",
+    "@polkadot-api/substrate-bindings": "^0.21.2",
+    "hono": "^4.13.13",
+    "polkadot-api": "^3.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "typescript": "^5.9.3"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  }
+}
