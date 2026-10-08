@@ -1,43 +1,43 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { Trade } from '../src/db.ts'
-import { formatUnits, scaledRatio } from '../src/decimal.ts'
-import { buildTickers, type PoolState } from '../src/tickers.ts'
+import type { Trade } from '../src/chain/trades.ts'
+import { formatPrice, formatUnits, price } from '../src/tickers/decimal.ts'
+import { buildTickers, type PoolReserves } from '../src/tickers/tickers.ts'
 
-const usdt: PoolState = {
+const usdt: PoolReserves = {
   account: '12dvmstTqsjrPrPdouMpbsgaaQjPGYFh7gMaiNgZ7Rzaacok',
-  asset: { id: '1984', symbol: 'USDt', decimals: 6, key: 'usdt' },
+  assetKey: 'usdt',
+  asset: { id: '1984', symbol: 'USDt', decimals: 6 },
   dotReserve: 1_000_000n * 10n ** 10n, // 1M DOT
-  assetReserve: 1_100_000n * 10n ** 6n, // 1.1M USDt -> DOT = $1.10
+  assetReserve: 1_100_000n * 10n ** 6n, // 1.1M USDt, so DOT = $1.10
 }
-const glmr: PoolState = {
+const glmr: PoolReserves = {
   account: '13foreign',
-  asset: { id: '0x0000002000000000000000000000000002200000', symbol: 'GLMR', decimals: 18, key: 'glmr' },
+  assetKey: 'glmr',
+  asset: { id: '0x0000002000000000000000000000000002200000', symbol: 'GLMR', decimals: 18 },
   dotReserve: 100n * 10n ** 10n, // 100 DOT
-  assetReserve: 5_000n * 10n ** 18n, // 5,000 GLMR -> 50 GLMR per DOT
+  assetReserve: 5_000n * 10n ** 18n, // 5,000 GLMR, so 50 GLMR per DOT
 }
 
-const trade = (block: number, key: string, dot: bigint, asset: bigint): Trade => ({
-  block, eventIndex: 0, leg: 0, timestamp: 0, asset: key, dotAmount: dot, assetAmount: asset, type: 'buy',
-})
+const trade = (asset: string, dotAmount: bigint, assetAmount: bigint): Trade => ({ asset, dotAmount, assetAmount })
 
 test('decimal helpers', () => {
   assert.equal(formatUnits(1_234_500n, 6), '1.2345')
   assert.equal(formatUnits(5n, 6), '0.000005')
   assert.equal(formatUnits(1_000_000n, 6), '1')
   assert.equal(formatUnits(1_239n, 3, 2), '1.23')
-  assert.equal(formatUnits(scaledRatio(11n * 10n ** 5n, 6, 10n ** 10n, 10), 18), '1.1')
+  assert.equal(formatPrice(price(11n * 10n ** 5n, 6, 10n ** 10n, 10)), '1.1')
 })
 
 test('tickers from reserves and trades', () => {
   const trades = [
-    trade(1, 'usdt', 10n * 10n ** 10n, 11_200_000n), // 10 DOT for 11.2 USDt
-    trade(2, 'usdt', 5n * 10n ** 10n, 5_400_000n), // 5 DOT for 5.4 USDt
-    trade(3, 'usdt', 756n, 1n), // dust: counts towards volume, not price
+    trade('usdt', 10n * 10n ** 10n, 11_200_000n), // 10 DOT for 11.2 USDt
+    trade('usdt', 5n * 10n ** 10n, 5_400_000n), // 5 DOT for 5.4 USDt
+    trade('usdt', 756n, 1n), // dust: counts towards volume, not price
   ]
   const [first, second] = buildTickers([glmr, usdt], trades, 0)
 
-  // Sorted by liquidity: the USDt pool comes first.
+  // Largest pool first.
   assert.deepEqual(first.ticker, {
     ticker_id: 'DOT_1984',
     base_currency: 'DOT',
@@ -52,7 +52,7 @@ test('tickers from reserves and trades', () => {
   })
   assert.equal(first.volumeUsd, '16.5')
 
-  // No trades: spot price from reserves, no high/low.
+  // No trades: the price from reserves, and no high/low.
   assert.deepEqual(second.ticker, {
     ticker_id: 'DOT_0x0000002000000000000000000000000002200000',
     base_currency: 'DOT',

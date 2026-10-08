@@ -52,8 +52,8 @@ USD values use the DOT price of the DOT/USDt pool, with USDt valued at $1. Volum
 One Node.js process, with no external database:
 
 1. **Indexer.** Follows finalized blocks and stores each swap, split into one row per pool, in SQLite. On a fresh start it backfills the last 43,200 blocks (at least 24 hours). After a restart it resumes from the last indexed block.
-2. **Snapshot.** Every 60 seconds it reads the pools and their reserves at the latest finalized block and builds the tickers from the swaps of the last 24 hours.
-3. **HTTP.** [Hono](https://hono.dev) serves the snapshot from memory.
+2. **Snapshot.** Every 60 seconds it reads the pools and their reserves at the latest finalized block and builds the tickers from the swaps of the last 24 hours. Asset metadata is cached until the indexer sees a block that changes it.
+3. **HTTP.** [Hono](https://hono.dev) serves the snapshot from memory, with the JSON and HTML rendered once per snapshot.
 
 Chain access uses [polkadot-api](https://papi.how) against a public RPC node. That node must serve historical blocks for the backfill.
 

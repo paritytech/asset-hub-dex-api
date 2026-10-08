@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { DOT_LOCATION, foreignAssetAddress, locationKey, trustBackedAssetId, type Location } from '../src/assets.ts'
-import { legsFromPath } from '../src/swaps.ts'
+import { DOT_LOCATION, foreignAssetAddress, locationKey, trustBackedAssetId, type Location } from '../src/chain/assets.ts'
+import { tradesFromPath } from '../src/chain/trades.ts'
 
 const asset = (id: bigint): Location => ({
   parents: 0,
@@ -10,26 +10,23 @@ const asset = (id: bigint): Location => ({
 const USDT = asset(1984n)
 const DOTUSD = asset(7873n)
 
-test('splits a multi-hop swap into one leg per pool', () => {
+test('splits a multi-hop swap into one trade per pool', () => {
   // SwapExecuted at block #21,572,110: 19,981.085162 dotUSD -> 22,556.10 DOT -> 24,301.065755 USDt
-  const legs = legsFromPath([
+  const trades = tradesFromPath([
     [DOTUSD, 19_981_085_162n],
     [DOT_LOCATION, 225_561_014_239_531n],
     [USDT, 24_301_065_755n],
   ])
-  assert.deepEqual(legs, [
-    { asset: locationKey(DOTUSD), dotAmount: 225_561_014_239_531n, assetAmount: 19_981_085_162n, type: 'buy' },
-    { asset: locationKey(USDT), dotAmount: 225_561_014_239_531n, assetAmount: 24_301_065_755n, type: 'sell' },
+  assert.deepEqual(trades, [
+    { asset: locationKey(DOTUSD), dotAmount: 225_561_014_239_531n, assetAmount: 19_981_085_162n },
+    { asset: locationKey(USDT), dotAmount: 225_561_014_239_531n, assetAmount: 24_301_065_755n },
   ])
 })
 
-test('single-hop swaps', () => {
-  assert.deepEqual(legsFromPath([[DOT_LOCATION, 10n], [USDT, 20n]]), [
-    { asset: locationKey(USDT), dotAmount: 10n, assetAmount: 20n, type: 'sell' },
-  ])
-  assert.deepEqual(legsFromPath([[USDT, 20n], [DOT_LOCATION, 10n]]), [
-    { asset: locationKey(USDT), dotAmount: 10n, assetAmount: 20n, type: 'buy' },
-  ])
+test('single-hop swaps in both directions', () => {
+  const trade = { asset: locationKey(USDT), dotAmount: 10n, assetAmount: 20n }
+  assert.deepEqual(tradesFromPath([[DOT_LOCATION, 10n], [USDT, 20n]]), [trade])
+  assert.deepEqual(tradesFromPath([[USDT, 20n], [DOT_LOCATION, 10n]]), [trade])
 })
 
 test('asset ids', () => {
