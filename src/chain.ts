@@ -33,7 +33,10 @@ export async function connectChain(rpcUrls: string[]) {
   const client = createWsClient(rpcUrls)
   const api = client.getTypedApi(ah)
   const codecs = await getTypedCodecs(ah)
+  // Asset metadata, cleared whenever a block changes any. Changes are rare, so clearing it all is simplest.
   const assetInfoCache = new Map<string, AssetInfo>()
+  // Bumped on every clear, so a read that overlapped a change is not cached.
+  let metadataVersion = 0
 
   async function blockHash(number: number): Promise<string> {
     const hash = await client._request<string | null>('chain_getBlockHash', [number])
@@ -41,12 +44,20 @@ export async function connectChain(rpcUrls: string[]) {
     return hash
   }
 
-  /** Swap legs executed in a block. */
+  /** Swap legs executed in a block. Also clears the asset metadata cache if the block changes metadata. */
   async function blockTrades(number: number): Promise<Trade[]> {
     const at = await blockHash(number)
     const events = await api.query.System.Events.getValue({ at })
     const trades: Omit<Trade, 'timestamp'>[] = []
     events.forEach(({ event }, eventIndex) => {
+      if (
+        (event.type === 'Assets' || event.type === 'ForeignAssets') &&
+        (event.value.type === 'MetadataSet' || event.value.type === 'MetadataCleared')
+      ) {
+        console.log(`chain: ${event.type}.${event.value.type} at #${number}, clearing asset metadata cache`)
+        assetInfoCache.clear()
+        metadataVersion++
+      }
       if (event.type !== 'AssetConversion') return
       if (event.value.type !== 'SwapExecuted' && event.value.type !== 'SwapCreditExecuted') return
       legsFromPath(event.value.value.path).forEach((leg, i) => trades.push({ ...leg, block: number, eventIndex, leg: i }))
@@ -75,6 +86,8 @@ export async function connectChain(rpcUrls: string[]) {
     const cached = assetInfoCache.get(key)
     if (cached) return cached
 
+    // Reads use the latest finalized block, which is at or past any block the indexer has seen.
+    const version = metadataVersion
     let info: AssetInfo | undefined
     const assetId = trustBackedAssetId(location)
     if (assetId !== undefined) {
@@ -89,7 +102,7 @@ export async function connectChain(rpcUrls: string[]) {
         info = { id: foreignAssetAddress(index), symbol: text.decode(metadata.symbol), decimals: metadata.decimals }
       }
     }
-    if (info) assetInfoCache.set(key, info)
+    if (info && version === metadataVersion) assetInfoCache.set(key, info)
     return info
   }
 

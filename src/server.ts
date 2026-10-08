@@ -4,7 +4,17 @@ import { html } from 'hono/html'
 import type { Indexer } from './indexer.ts'
 import type { TickerRow } from './tickers.ts'
 
-export type Snapshot = { rows: TickerRow[]; block: number; updatedAt: Date }
+/** Tickers at a finalized block, with the responses pre-rendered so requests only send strings. */
+export type Snapshot = { block: number; updatedAt: Date; json: string; html: string }
+
+export async function createSnapshot(rows: TickerRow[], block: number, updatedAt: Date): Promise<Snapshot> {
+  return {
+    block,
+    updatedAt,
+    json: JSON.stringify(rows.map((row) => row.ticker)),
+    html: String(await renderPage(rows, block, updatedAt)),
+  }
+}
 
 /** /health fails when the snapshot has not been refreshed for this long. */
 const STALE_AFTER_SECONDS = 300
@@ -18,8 +28,7 @@ export function createApp(getSnapshot: () => Snapshot | undefined, indexer: Inde
   app.get('/tickers', (c) => {
     const snapshot = getSnapshot()
     if (!snapshot) return c.json({ error: 'Indexing in progress' }, 503)
-    c.header('Cache-Control', 'public, max-age=30')
-    return c.json(snapshot.rows.map((row) => row.ticker))
+    return c.body(snapshot.json, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30' })
   })
 
   app.get('/health', (c) => {
@@ -34,36 +43,38 @@ export function createApp(getSnapshot: () => Snapshot | undefined, indexer: Inde
 
   app.get('/', (c) => {
     const snapshot = getSnapshot()
-    if (!snapshot) return c.html(page(html`<p>Indexing the last 24 hours of swaps, check back in a few minutes.</p>`), 503)
-    return c.html(page(html`
-      <table>
-        <thead>
-          <tr>
-            <th>Pair</th><th>Ticker</th><th>Last price</th><th>24h volume (DOT)</th><th>24h volume (target)</th>
-            <th>24h volume (USD)</th><th>Liquidity (USD)</th><th>High / low (24h)</th><th>Pool</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${snapshot.rows.map(({ ticker, targetSymbol, volumeUsd }) => html`
-            <tr>
-              <td>DOT/${targetSymbol}</td>
-              <td><code>${ticker.ticker_id}</code></td>
-              <td>${ticker.last_price}</td>
-              <td>${ticker.base_volume}</td>
-              <td>${ticker.target_volume}</td>
-              <td>$${volumeUsd}</td>
-              <td>$${ticker.liquidity_in_usd}</td>
-              <td>${ticker.high ? `${ticker.high} / ${ticker.low}` : '-'}</td>
-              <td><code>${ticker.pool_id}</code></td>
-            </tr>`)}
-        </tbody>
-      </table>
-      <p>Finalized block #${snapshot.block}, updated ${snapshot.updatedAt.toISOString()}. Prices are in target per DOT.
-        Data as JSON: <a href="/tickers">/tickers</a>.</p>`))
+    return snapshot ? c.html(snapshot.html) : c.html(loadingPage, 503)
   })
 
   return app
 }
+
+const renderPage = (rows: TickerRow[], block: number, updatedAt: Date) =>
+  page(html`
+    <table>
+      <thead>
+        <tr>
+          <th>Pair</th><th>Ticker</th><th>Last price</th><th>24h volume (DOT)</th><th>24h volume (target)</th>
+          <th>24h volume (USD)</th><th>Liquidity (USD)</th><th>High / low (24h)</th><th>Pool</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(({ ticker, targetSymbol, volumeUsd }) => html`
+          <tr>
+            <td>DOT/${targetSymbol}</td>
+            <td><code>${ticker.ticker_id}</code></td>
+            <td>${ticker.last_price}</td>
+            <td>${ticker.base_volume}</td>
+            <td>${ticker.target_volume}</td>
+            <td>$${volumeUsd}</td>
+            <td>$${ticker.liquidity_in_usd}</td>
+            <td>${ticker.high ? `${ticker.high} / ${ticker.low}` : '-'}</td>
+            <td><code>${ticker.pool_id}</code></td>
+          </tr>`)}
+      </tbody>
+    </table>
+    <p>Finalized block #${block}, updated ${updatedAt.toISOString()}. Prices are in target per DOT.
+      Data as JSON: <a href="/tickers">/tickers</a>.</p>`)
 
 const page = (body: unknown) => html`<!doctype html>
 <html lang="en">
@@ -85,3 +96,5 @@ const page = (body: unknown) => html`<!doctype html>
     ${body}
   </body>
 </html>`
+
+const loadingPage = page(html`<p>Indexing the last 24 hours of swaps, check back in a few minutes.</p>`)
