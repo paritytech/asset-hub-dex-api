@@ -4,12 +4,12 @@ import type { Trade } from '../src/chain/trades.ts'
 import { formatPrice, formatUnits, price } from '../src/tickers/decimal.ts'
 import { buildTickers, type PoolReserves } from '../src/tickers/tickers.ts'
 
-const usdt: PoolReserves = {
-  account: '12dvmstTqsjrPrPdouMpbsgaaQjPGYFh7gMaiNgZ7Rzaacok',
-  assetKey: 'usdt',
-  asset: { id: '1984', symbol: 'USDt', decimals: 6 },
+const dotUsd: PoolReserves = {
+  account: '166ASLGTqFioubHFAKzbSEyN9BgVQxpF2ruxr3uPNAB7RBQr',
+  assetKey: 'dotusd',
+  asset: { id: '7873', symbol: 'dotUSD', decimals: 6 },
   dotReserve: 1_000_000n * 10n ** 10n, // 1M DOT
-  assetReserve: 1_100_000n * 10n ** 6n, // 1.1M USDt, so DOT = $1.10
+  assetReserve: 1_100_000n * 10n ** 6n, // 1.1M dotUSD, so DOT = $1.10
 }
 const glmr: PoolReserves = {
   account: '13foreign',
@@ -31,18 +31,18 @@ test('decimal helpers', () => {
 
 test('tickers from reserves and trades', () => {
   const trades = [
-    trade('usdt', 10n * 10n ** 10n, 11_200_000n), // 10 DOT for 11.2 USDt
-    trade('usdt', 5n * 10n ** 10n, 5_400_000n), // 5 DOT for 5.4 USDt
-    trade('usdt', 756n, 1n), // dust: counts towards volume, not price
+    trade('dotusd', 10n * 10n ** 10n, 11_200_000n), // 10 DOT for 11.2 dotUSD
+    trade('dotusd', 5n * 10n ** 10n, 5_400_000n), // 5 DOT for 5.4 dotUSD
+    trade('dotusd', 756n, 1n), // dust: counts towards volume, not price
   ]
-  const [first, second] = buildTickers([glmr, usdt], trades, 0)
+  const [first, second] = buildTickers([glmr, dotUsd], trades, 0)
 
   // Largest pool first.
   assert.deepEqual(first.ticker, {
-    ticker_id: 'DOT_1984',
+    ticker_id: 'DOT_7873',
     base_currency: 'DOT',
-    target_currency: '1984',
-    pool_id: usdt.account,
+    target_currency: '7873',
+    pool_id: dotUsd.account,
     last_price: '1.08',
     base_volume: '15.0000000756',
     target_volume: '16.600001',
@@ -66,11 +66,11 @@ test('tickers from reserves and trades', () => {
 })
 
 test('leaves out pools below the minimum liquidity', () => {
-  // The GLMR pool holds $220, the USDt pool $2.2M.
-  assert.deepEqual(buildTickers([glmr, usdt], [], 1000).map((row) => row.ticker.ticker_id), ['DOT_1984'])
-  assert.equal(buildTickers([glmr, usdt], [], 220).length, 2)
+  // The GLMR pool holds $220, the dotUSD pool $2.2M.
+  assert.deepEqual(buildTickers([glmr, dotUsd], [], 1000).map((row) => row.ticker.ticker_id), ['DOT_7873'])
+  assert.equal(buildTickers([glmr, dotUsd], [], 220).length, 2)
 })
 
-test('fails without the USDt pool', () => {
+test('fails without the dotUSD pool', () => {
   assert.throws(() => buildTickers([glmr], [], 0), /pool not found/)
 })

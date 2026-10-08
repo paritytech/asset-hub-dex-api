@@ -13,8 +13,8 @@ const ASSETS_PALLET_INDEX = 50
 
 export const DOT_LOCATION: Location = { parents: 1, interior: { type: 'Here', value: undefined } }
 export const DOT: AssetInfo = { id: 'DOT', symbol: 'DOT', decimals: 10 }
-/** USDt (asset 1984). Its DOT pool prices DOT in USD. */
-export const USD_ASSET_ID = '1984'
+/** dotUSD (asset 7873). Its DOT pool prices DOT in USD, with dotUSD valued at $1. */
+export const USD_ASSET_ID = '7873'
 
 export function isDot(location: Location): boolean {
   return location.parents === 1 && location.interior.type === 'Here'

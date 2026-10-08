@@ -38,13 +38,13 @@ export type TickerRow = { ticker: Ticker; symbol: string; volumeUsd: string }
 
 /**
  * Builds tickers from current reserves and the last 24 hours of trades (oldest first), largest
- * pools first. USD values use the DOT price of the DOT/USDt pool, with USDt valued at $1.
+ * pools first. USD values use the DOT price of the DOT/dotUSD pool, with dotUSD valued at $1.
  * Pools with less than `minLiquidityUsd` of liquidity are left out.
  */
 export function buildTickers(pools: PoolReserves[], trades: Trade[], minLiquidityUsd: number): TickerRow[] {
   const usdPool = pools.find((pool) => pool.asset.id === USD_ASSET_ID)
   if (!usdPool) throw new Error(`DOT/${USD_ASSET_ID} pool not found`)
-  /** A DOT amount's value in USDt base units. */
+  /** A DOT amount's value in dotUSD base units. */
   const usdValue = (dot: bigint) => (dot * usdPool.assetReserve) / usdPool.dotReserve
   const formatUsd = (dot: bigint) => formatUnits(usdValue(dot), usdPool.asset.decimals, 2)
   const minLiquidity = BigInt(minLiquidityUsd) * 10n ** BigInt(usdPool.asset.decimals)
