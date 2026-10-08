@@ -41,16 +41,20 @@ export type TickerRow = {
 /**
  * Builds tickers from current pool reserves and the trades of the last 24 hours (oldest first).
  * USD values use the DOT price of the DOT/USDt pool, with USDt valued at $1.
+ * Pools with less than `minLiquidityUsd` of liquidity are left out.
  */
-export function buildTickers(pools: PoolState[], trades: Trade[]): TickerRow[] {
+export function buildTickers(pools: PoolState[], trades: Trade[], minLiquidityUsd: number): TickerRow[] {
   const usdPool = pools.find((pool) => pool.asset.id === USD_ASSET_ID)
   if (!usdPool) throw new Error(`DOT/${USD_ASSET_ID} pool not found`)
-  const toUsd = (dotAmount: bigint) =>
-    formatUnits((dotAmount * usdPool.assetReserve) / usdPool.dotReserve, usdPool.asset.decimals, 2)
+  // USD amounts are in USDt base units.
+  const usdUnits = (dotAmount: bigint) => (dotAmount * usdPool.assetReserve) / usdPool.dotReserve
+  const toUsd = (dotAmount: bigint) => formatUnits(usdUnits(dotAmount), usdPool.asset.decimals, 2)
+  const minLiquidity = BigInt(minLiquidityUsd) * 10n ** BigInt(usdPool.asset.decimals)
 
   const tradesByAsset = Map.groupBy(trades, (trade) => trade.asset)
 
-  const rows = pools.map((pool) => {
+  // Both sides of a pool are worth the same, so liquidity is twice the DOT side.
+  const rows = pools.filter((pool) => usdUnits(2n * pool.dotReserve) >= minLiquidity).map((pool) => {
     const { asset } = pool
     const price = (dotAmount: bigint, assetAmount: bigint) =>
       scaledRatio(assetAmount, asset.decimals, dotAmount, DOT.decimals)
@@ -71,7 +75,6 @@ export function buildTickers(pools: PoolState[], trades: Trade[]): TickerRow[] {
       last_price: formatUnits(lastPrice, PRICE_PRECISION),
       base_volume: formatUnits(dotVolume, DOT.decimals),
       target_volume: formatUnits(assetVolume, asset.decimals),
-      // Both sides of the pool are worth the same, so liquidity is twice the DOT side.
       liquidity_in_usd: toUsd(2n * pool.dotReserve),
     }
     if (prices.length > 0) {

@@ -8,6 +8,8 @@ export type Snapshot = { rows: TickerRow[]; block: number; updatedAt: Date }
 
 /** /health fails when the snapshot has not been refreshed for this long. */
 const STALE_AFTER_SECONDS = 300
+/** /health fails when the indexer is this many blocks (about 5 minutes) behind the finalized head. */
+const MAX_LAG_BLOCKS = 150
 
 export function createApp(getSnapshot: () => Snapshot | undefined, indexer: Indexer) {
   const app = new Hono()
@@ -24,11 +26,10 @@ export function createApp(getSnapshot: () => Snapshot | undefined, indexer: Inde
     const status = indexer.status()
     const snapshot = getSnapshot()
     const snapshotAgeSeconds = snapshot ? Math.round((Date.now() - snapshot.updatedAt.getTime()) / 1000) : null
-    const healthy = snapshotAgeSeconds !== null && snapshotAgeSeconds < STALE_AFTER_SECONDS
-    return c.json(
-      { ...status, lag: status.finalizedBlock - status.indexedBlock, snapshotBlock: snapshot?.block ?? null, snapshotAgeSeconds },
-      healthy ? 200 : 503,
-    )
+    // The snapshot reads the finalized block itself, so this also catches a stalled block subscription.
+    const lag = Math.max(status.finalizedBlock, snapshot?.block ?? 0) - status.indexedBlock
+    const healthy = snapshotAgeSeconds !== null && snapshotAgeSeconds < STALE_AFTER_SECONDS && lag < MAX_LAG_BLOCKS
+    return c.json({ ...status, lag, snapshotBlock: snapshot?.block ?? null, snapshotAgeSeconds }, healthy ? 200 : 503)
   })
 
   app.get('/', (c) => {

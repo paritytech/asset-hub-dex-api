@@ -13,6 +13,8 @@ export const config = {
   backfillBlocks: Number(env.BACKFILL_BLOCKS ?? 43_200),
   // Blocks fetched in parallel while catching up.
   concurrency: Number(env.CONCURRENCY ?? 50),
+  // Pools with less liquidity (in whole USD) are left out of the tickers.
+  minLiquidityUsd: Math.floor(Number(env.MIN_LIQUIDITY_USD ?? 1000)),
   // Trades older than this are deleted.
   retentionDays: Number(env.RETENTION_DAYS ?? 7),
 }

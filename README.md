@@ -6,9 +6,9 @@ A public, unauthenticated API for the liquidity pools of Polkadot Asset Hub's `p
 
 | Endpoint | Description |
 |---|---|
-| `GET /tickers` | One ticker per pool, as a JSON array. Cached for 30s. |
+| `GET /tickers` | One ticker per pool with at least $1,000 of liquidity, as a JSON array. Cached for 30s. |
 | `GET /` | A stats page with the same data, for checking the API against. |
-| `GET /health` | Indexing status. Returns 503 until the first snapshot is ready, or when it is more than 5 minutes old. |
+| `GET /health` | Indexing status. Returns 503 until the first snapshot is ready, or when the snapshot or indexing is more than 5 minutes (150 blocks) behind. |
 
 `/orderbook` is not provided: the pools are AMM pools. `/historical_trades` is optional in the standard and not provided.
 
@@ -73,6 +73,12 @@ docker build -t asset-hub-dex-api .
 docker run -p 3000:3000 -v dex-data:/data asset-hub-dex-api
 ```
 
+In production:
+
+- **Keep `/data` on a persistent volume.** Otherwise every restart repeats the 24h backfill, about 6 minutes without data.
+- **Restart the service when `/health` keeps failing.** If the service gets stuck, e.g. after losing its chain connection, it can't restart itself. Configure the hosting platform to do it, for example with a Kubernetes liveness probe.
+- **Delay those health checks by about 10 minutes after a fresh start.** `/health` fails while the first backfill runs, so checks that start immediately would restart the service mid-backfill, over and over.
+
 | Variable | Default | |
 |---|---|---|
 | `RPC_URLS` | Parity and Dwellir public RPCs | Comma-separated WebSocket endpoints, tried in order |
@@ -81,6 +87,7 @@ docker run -p 3000:3000 -v dex-data:/data asset-hub-dex-api
 | `REFRESH_SECONDS` | `60` | How often the snapshot is rebuilt |
 | `BACKFILL_BLOCKS` | `43200` | Blocks indexed on a fresh start |
 | `CONCURRENCY` | `50` | Blocks fetched in parallel while catching up |
+| `MIN_LIQUIDITY_USD` | `1000` | Pools with less liquidity are left out of `/tickers` and the stats page |
 | `RETENTION_DAYS` | `7` | Swaps older than this are deleted |
 
 ```sh

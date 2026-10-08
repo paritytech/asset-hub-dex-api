@@ -35,7 +35,7 @@ test('tickers from reserves and trades', () => {
     trade(2, 'usdt', 5n * 10n ** 10n, 5_400_000n), // 5 DOT for 5.4 USDt
     trade(3, 'usdt', 756n, 1n), // dust: counts towards volume, not price
   ]
-  const [first, second] = buildTickers([glmr, usdt], trades)
+  const [first, second] = buildTickers([glmr, usdt], trades, 0)
 
   // Sorted by liquidity: the USDt pool comes first.
   assert.deepEqual(first.ticker, {
@@ -65,6 +65,12 @@ test('tickers from reserves and trades', () => {
   })
 })
 
+test('leaves out pools below the minimum liquidity', () => {
+  // The GLMR pool holds $220, the USDt pool $2.2M.
+  assert.deepEqual(buildTickers([glmr, usdt], [], 1000).map((row) => row.ticker.ticker_id), ['DOT_1984'])
+  assert.equal(buildTickers([glmr, usdt], [], 220).length, 2)
+})
+
 test('fails without the USDt pool', () => {
-  assert.throws(() => buildTickers([glmr], []), /pool not found/)
+  assert.throws(() => buildTickers([glmr], [], 0), /pool not found/)
 })
