@@ -1,18 +1,16 @@
 # Asset Hub DEX API
 
-A public, unauthenticated API for the liquidity pools of Polkadot Asset Hub's `pallet-asset-conversion`. It serves the DEX `/tickers` endpoint from CoinGecko's *Integration API Standards* (section A), so the pools can be listed as an exchange on CoinGecko.
+CoinGecko DEX API for the pools of Polkadot Asset Hub's `pallet-asset-conversion`. It implements `/tickers` from CoinGecko's [Integration API Standards](https://docs.google.com/document/d/1v27QFoQq1SKT3Priq3aqPgB70Xd_PnDzbOCiuoCyixw) (section A).
 
-## Endpoints
+## API
 
-| Endpoint | Description |
+| Endpoint | |
 |---|---|
-| `GET /tickers` | One ticker per pool with at least $1,000 of liquidity, as a JSON array. Cached for 30s. |
-| `GET /` | A stats page with the same data, for checking the API against. |
-| `GET /health` | Indexing status. Returns 503 until the first snapshot is ready, or when the snapshot or indexing is more than 5 minutes (150 blocks) behind. |
+| `GET /tickers` | Pools with at least $1,000 of liquidity, as CoinGecko tickers. Cached for 30s. |
+| `GET /` | Stats page with the same data, for verifying the API. |
+| `GET /health` | 503 until the first snapshot is ready, or when the snapshot or indexing is more than 5 minutes (150 blocks) behind. |
 
-`/orderbook` is not provided: the pools are AMM pools. `/historical_trades` is optional in the standard and not provided.
-
-### `/tickers`
+No `/orderbook` (the pools are AMMs) and no `/historical_trades` (optional).
 
 ```json
 [
@@ -31,42 +29,42 @@ A public, unauthenticated API for the liquidity pools of Polkadot Asset Hub's `p
 ]
 ```
 
-Every pool pairs DOT with one other asset, so DOT is always the base currency. Decimal values are strings, to keep full precision.
-
-| Field | How it is derived |
+| Field | Value |
 |---|---|
-| `base_currency`, `target_currency` | `DOT` for the native token. Trust-backed assets (pallet `Assets`) use their asset id, e.g. `1984` for USDt and `1337` for USDC. Foreign assets use their ERC20 precompile address on Polkadot Hub, e.g. `0x0000001200000000000000000000000002200000`. |
+| `base_currency` | Always `DOT`: the runtime only allows pools of DOT and one other asset (`PoolLocator = WithFirstAsset<DotLocation>`). |
+| `target_currency` | Asset id for trust-backed assets (`1984` USDt, `1337` USDC), ERC20 precompile address for foreign assets (`0x0000001200000000000000000000000002200000`). |
 | `ticker_id` | `{base_currency}_{target_currency}` |
-| `pool_id` | The pool account (SS58, Polkadot prefix). It holds the pool's reserves. |
-| `last_price` | Target per DOT, from the pool's last swap in the past 24 hours. Pools with no swaps in that time use the current price from reserves. |
-| `base_volume`, `target_volume` | 24h single-sided volume in DOT and in the target asset. |
-| `high`, `low` | Highest and lowest swap price in the past 24 hours. Left out when the pool had no swaps. |
-| `liquidity_in_usd` | 2 × the pool's DOT reserve × the DOT price in USD. |
+| `pool_id` | Pool account (SS58). |
+| `last_price` | Target per DOT at the last trade of the past 24h, or from reserves if there was none. |
+| `base_volume`, `target_volume` | 24h volume in DOT and in the target asset. |
+| `high`, `low` | 24h price range, omitted without trades. |
+| `liquidity_in_usd` | 2 × DOT reserve × DOT price. |
 
-USD values use the DOT price of the DOT/USDt pool, with USDt valued at $1. Volumes count both swap events (`SwapExecuted`, and `SwapCreditExecuted` from fees paid in other assets). A swap routed through two pools (X → DOT → Y) counts as a trade in each of them.
-
-**Depth:** the pools use the Uniswap V2 constant product formula (x·y = k) with a 0.3% LP fee, so CoinGecko's default Uniswap V2 depth calculation applies.
+- Decimals are strings, for full precision.
+- USD values take the DOT price from the DOT/USDt pool, with USDt at $1.
+- Volume counts `SwapExecuted` and `SwapCreditExecuted` (fees paid in other assets). A swap routed through two pools counts in both.
+- Dust trades, under 10,000 base units, count towards volume but not prices.
+- Pools are constant product (x·y = k) with a 0.3% fee, so CoinGecko's default Uniswap V2 depth formula applies.
 
 ## How it works
 
-One Node.js process, with no external database:
+One Node.js process with SQLite, reading the chain through [polkadot-api](https://papi.how):
 
-1. **Indexer.** Follows finalized blocks and stores each swap, split into one row per pool, in SQLite. On a fresh start it backfills the last 43,200 blocks (at least 24 hours). After a restart it resumes from the last indexed block.
-2. **Snapshot.** Every 60 seconds it reads the pools and their reserves at the latest finalized block and builds the tickers from the swaps of the last 24 hours. Asset metadata is cached until the indexer sees a block that changes it.
-3. **HTTP.** [Hono](https://hono.dev) serves the snapshot from memory, with the JSON and HTML rendered once per snapshot.
+- `src/chain` reads Asset Hub. Asset metadata is cached until a block changes it.
+- `src/indexer` follows finalized blocks and stores each swap's trades, one per pool. A fresh start backfills 43,200 blocks (at least 24h); a restart resumes where it stopped.
+- `src/tickers` rebuilds the tickers every minute from the reserves at the latest finalized block and the last 24h of trades.
+- `src/http` serves the latest tickers from memory, with [Hono](https://hono.dev).
 
-Chain access uses [polkadot-api](https://papi.how) against a public RPC node. That node must serve historical blocks for the backfill.
+The RPC node must serve historical blocks for the backfill.
 
 ## Running
 
-Requires Node.js 24 or later; it runs the TypeScript sources directly.
+Requires Node.js 24, which runs the TypeScript sources directly.
 
 ```sh
-npm install   # also generates the chain descriptors from .papi/metadata
-npm start     # the first start takes about 6 minutes to index 24 hours of swaps
+npm install   # generates the chain descriptors from .papi/metadata
+npm start     # the first start indexes 24h of swaps, about 6 minutes
 ```
-
-Docker:
 
 ```sh
 docker build -t asset-hub-dex-api .
@@ -75,24 +73,25 @@ docker run -p 3000:3000 -v dex-data:/data asset-hub-dex-api
 
 In production:
 
-- **Keep `/data` on a persistent volume.** Otherwise every restart repeats the 24h backfill, about 6 minutes without data.
-- **Restart the service when `/health` keeps failing.** If the service gets stuck, e.g. after losing its chain connection, it can't restart itself. Configure the hosting platform to do it, for example with a Kubernetes liveness probe.
-- **Delay those health checks by about 10 minutes after a fresh start.** `/health` fails while the first backfill runs, so checks that start immediately would restart the service mid-backfill, over and over.
+- Keep `/data` on a persistent volume, so restarts skip the backfill.
+- Restart the service when `/health` keeps failing, e.g. with a Kubernetes liveness probe. It can't recover from everything on its own.
+- Start those checks about 10 minutes after a fresh start, so they don't restart it mid-backfill.
 
 | Variable | Default | |
 |---|---|---|
-| `RPC_URLS` | Parity and Dwellir public RPCs | Comma-separated WebSocket endpoints, tried in order |
+| `RPC_URLS` | Parity, Dwellir | WebSocket endpoints, comma-separated, tried in order |
 | `PORT` | `3000` | |
 | `DB_PATH` | `data/trades.db` | |
-| `REFRESH_SECONDS` | `60` | How often the snapshot is rebuilt |
+| `REFRESH_SECONDS` | `60` | Seconds between ticker rebuilds |
 | `BACKFILL_BLOCKS` | `43200` | Blocks indexed on a fresh start |
-| `CONCURRENCY` | `50` | Blocks fetched in parallel while catching up |
-| `MIN_LIQUIDITY_USD` | `1000` | Pools with less liquidity are left out of `/tickers` and the stats page |
-| `RETENTION_DAYS` | `7` | Swaps older than this are deleted |
+| `CONCURRENCY` | `50` | Blocks read in parallel while catching up |
+| `MIN_LIQUIDITY_USD` | `1000` | Pools with less liquidity are left out |
+| `RETENTION_DAYS` | `7` | Days trades are kept |
+
+## Development
 
 ```sh
 npm test
 npm run typecheck
+npx papi update   # after a runtime upgrade that changes the pallets used here
 ```
-
-After a runtime upgrade that changes the pallets used here, refresh the metadata with `npx papi update`.
