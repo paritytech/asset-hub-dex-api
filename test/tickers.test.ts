@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Trade } from '../src/chain/trades.ts'
-import { formatPrice, formatUnits, price } from '../src/tickers/decimal.ts'
+import { formatFixed, formatUnits, price } from '../src/tickers/decimal.ts'
 import { buildTickers, type PoolReserves } from '../src/tickers/tickers.ts'
 
 const dotUsd: PoolReserves = {
@@ -19,6 +19,15 @@ const glmr: PoolReserves = {
   assetReserve: 5_000n * 10n ** 18n, // 5,000 GLMR, so 50 GLMR per DOT
 }
 
+/** A stablecoin pool of 1M DOT, with DOT priced at `usdPerDot`. */
+const stablePool = (id: string, usdPerDot: bigint): PoolReserves => ({
+  account: `pool-${id}`,
+  assetKey: id,
+  asset: { id, symbol: id, decimals: 6 },
+  dotReserve: 1_000_000n * 10n ** 10n,
+  assetReserve: 1_000_000n * usdPerDot,
+})
+
 const trade = (asset: string, dotAmount: bigint, assetAmount: bigint): Trade => ({ asset, dotAmount, assetAmount })
 
 test('decimal helpers', () => {
@@ -26,7 +35,7 @@ test('decimal helpers', () => {
   assert.equal(formatUnits(5n, 6), '0.000005')
   assert.equal(formatUnits(1_000_000n, 6), '1')
   assert.equal(formatUnits(1_239n, 3, 2), '1.23')
-  assert.equal(formatPrice(price(11n * 10n ** 5n, 6, 10n ** 10n, 10)), '1.1')
+  assert.equal(formatFixed(price(11n * 10n ** 5n, 6, 10n ** 10n, 10)), '1.1')
 })
 
 test('tickers from reserves and trades', () => {
@@ -71,6 +80,13 @@ test('leaves out pools below the minimum liquidity', () => {
   assert.equal(buildTickers([glmr, dotUsd], [], 220).length, 2)
 })
 
-test('fails without the dotUSD pool', () => {
-  assert.throws(() => buildTickers([glmr], [], 0), /pool not found/)
+test('prices DOT at the median of the stablecoin pools', () => {
+  // DOT at $1.00 (USDt), $1.10 (dotUSD) and $1.50 (a depegged USDC): the median is $1.10.
+  const pools = [glmr, dotUsd, stablePool('1984', 1_000_000n), stablePool('1337', 1_500_000n)]
+  const glmrRow = buildTickers(pools, [], 0).find((row) => row.symbol === 'GLMR')
+  assert.equal(glmrRow?.ticker.liquidity_in_usd, '220') // 200 DOT at $1.10
+})
+
+test('fails without any stablecoin pool', () => {
+  assert.throws(() => buildTickers([glmr], [], 0), /No stablecoin pool/)
 })

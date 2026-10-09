@@ -8,7 +8,7 @@ export async function renderPage(rows: TickerRow[], block: number, updatedAt: Da
       <thead>
         <tr>
           <th>Pair</th><th>Ticker</th><th>Last price</th><th>24h volume (DOT)</th><th>24h volume (target)</th>
-          <th>24h volume (USD)</th><th>Liquidity (USD)</th><th>High / low (24h)</th><th>Pool</th>
+          <th>24h volume (USD at current price)</th><th>Liquidity (USD)</th><th>High / low (24h)</th><th>Pool</th>
         </tr>
       </thead>
       <tbody>

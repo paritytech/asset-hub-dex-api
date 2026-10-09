@@ -43,7 +43,7 @@ No `/orderbook` (the pools are AMMs) and no `/historical_trades` (optional).
 | `liquidity_in_usd` | 2 × DOT reserve × DOT price. |
 
 - Decimals are strings, for full precision.
-- USD values take the DOT price from the DOT/dotUSD pool, with dotUSD at $1.
+- USD values take DOT's price as the median of its USDt, USDC and dotUSD pools, each stablecoin at $1.
 - Volume counts `SwapExecuted` and `SwapCreditExecuted` (fees paid in other assets). A swap routed through two pools counts in both.
 - Dust trades, under 10,000 base units, count towards volume but not prices.
 - Pools are constant product (x·y = k) with a 0.3% fee, so CoinGecko's default Uniswap V2 depth formula applies.
