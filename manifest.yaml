@@ -1,0 +1,54 @@
+# https://github.com/paritytech/devops/issues/5759
+#
+# Shared values. The image build workflow reads `registry`, `dockerfile` and
+# `context`; generic-helm reads the rest for both environments. Per-environment
+# values are in manifest-staging.yaml and manifest-production.yaml.
+registry: europe-docker.pkg.dev/parity-mgmt/asset-hub-dex-api
+
+# One instance, as the README asks for. A rollout still overlaps two pods for a
+# moment; the trades table takes that, as its primary key makes every insert
+# idempotent.
+replicaCount: 1
+
+images:
+  asset-hub-dex-api:
+    dockerfile: Dockerfile
+    context: .
+    port: 3000
+    http:
+      path: /
+    env:
+      # Asset Hub Polkadot, archive nodes. Tried in order.
+      RPC_URLS: wss://polkadot-asset-hub-rpc.polkadot.io,wss://asset-hub-polkadot-rpc.n.dwellir.com
+    # /health returns 503 while the data is stale, and the service cannot always
+    # recover on its own. The startup probe covers the first backfill, about 6
+    # minutes, and holds the liveness probe off until it passes. After that,
+    # 5 minutes of continuous failure restarts the pod; a restart resumes from
+    # the database and does not backfill again.
+    #
+    # No readiness probe on purpose: with one replica it would empty the Ingress
+    # backend and replace the service's own 503, which carries a message.
+    probes:
+      startup:
+        path: /health
+        periodSeconds: 15
+        failureThreshold: 60
+      liveness:
+        path: /health
+        periodSeconds: 30
+        failureThreshold: 10
+    # The first start indexes 24h of swaps with CONCURRENCY=50, which is the
+    # heaviest the service gets. Staging does the same work as production.
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+# PostgreSQL through the Cloud SQL Auth Proxy, at cloudsql:5432 in the app
+# namespace. Instance, project, region and service accounts are derived by
+# generic-helm from the release name and the environment.
+cloudSql:
+  enabled: true

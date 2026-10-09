@@ -1,0 +1,15 @@
+# Production overrides, applied on top of manifest.yaml by the products
+# ApplicationSet in devops-cloud-infra/kubernetes/00-appset.
+#
+# Host: polkadot-hub-dex.parity.io (traefik-external, public). CoinGecko polls
+# /tickers from the internet, so the ingress must stay external.
+images:
+  asset-hub-dex-api:
+    http:
+      host: polkadot-hub-dex.parity.io
+      path: /
+    env:
+      # NOTE(sre): write this key before the first sync.
+      # Value: postgres://asset-hub-dex-api:<password>@cloudsql:5432/asset-hub-dex-api
+      # File: devops-cloud-infra/secrets/vault/argo-cd/asset-hub-dex-api/devops-parity-prod.yaml
+      DATABASE_URL: ref+vault://kv/argo-cd/asset-hub-dex-api/devops-parity-prod#DATABASE_URL
