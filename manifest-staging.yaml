@@ -1,0 +1,11 @@
+# Staging overrides, applied on top of manifest.yaml by the products
+# ApplicationSet in devops-cloud-infra/kubernetes/00-appset.
+#
+# Host: asset-hub-dex-api.parity-stg.parity.io (traefik-internal).
+images:
+  asset-hub-dex-api:
+    env:
+      # NOTE(sre): write this key before the first sync.
+      # Value: postgres://asset-hub-dex-api:<password>@cloudsql:5432/asset-hub-dex-api
+      # File: devops-cloud-infra/secrets/vault/argo-cd/asset-hub-dex-api/devops-parity-stg.yaml
+      DATABASE_URL: ref+vault://kv/argo-cd/asset-hub-dex-api/devops-parity-stg#DATABASE_URL
