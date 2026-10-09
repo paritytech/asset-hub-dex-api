@@ -27,17 +27,13 @@ export async function openDb(url: string) {
 
     /** Stores the trades of a block range and marks the range as indexed, in one transaction. */
     async saveBlocks(trades: IndexedTrade[], lastBlock: number) {
-      const rows = trades.map((t) => ({
-        block: t.block,
-        event_index: t.eventIndex,
-        hop: t.hop,
-        timestamp: t.timestamp,
-        asset: t.asset,
-        dot_amount: String(t.dotAmount),
-        asset_amount: String(t.assetAmount),
-      }))
       await sql.begin(async (sql) => {
-        if (rows.length > 0) await sql`INSERT INTO trades ${sql(rows)} ON CONFLICT DO NOTHING`
+        for (const t of trades) {
+          await sql`
+            INSERT INTO trades (block, event_index, hop, timestamp, asset, dot_amount, asset_amount)
+            VALUES (${t.block}, ${t.eventIndex}, ${t.hop}, ${t.timestamp}, ${t.asset}, ${String(t.dotAmount)}, ${String(t.assetAmount)})
+            ON CONFLICT DO NOTHING`
+        }
         await sql`
           INSERT INTO state (key, value) VALUES ('lastBlock', ${String(lastBlock)})
           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`
