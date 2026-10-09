@@ -30,7 +30,7 @@ export async function renderPage(rows: TickerRow[], block: number, updatedAt: Da
       Data as JSON: <a href="/tickers">/tickers</a>.</p>`)
 }
 
-export const loadingPage = await layout(html`<p>Indexing the last 24 hours of swaps, check back in a few minutes.</p>`)
+export const unavailablePage = await layout(html`<p>No up-to-date data, check back in a few minutes.</p>`)
 
 async function layout(body: unknown): Promise<string> {
   return String(await html`<!doctype html>

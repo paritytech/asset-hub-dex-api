@@ -11,8 +11,20 @@ const DAY_MS = 24 * 60 * 60 * 1000
 /** Pools read in parallel. Bounds the RPC load however many pools exist. */
 const POOL_READ_CONCURRENCY = 10
 
-/** The tickers at a finalized block, with the responses rendered once rather than per request. */
-export type Snapshot = { block: number; updatedAt: Date; json: string; html: string }
+/** A snapshot older than this, or this many blocks (about 5 minutes) behind the chain head, is stale. */
+const MAX_AGE_MS = 5 * 60 * 1000
+const MAX_LAG_BLOCKS = 150
+
+/**
+ * The tickers at the last indexed block, with the responses rendered once rather than per request.
+ * `head` is the finalized block at the time, to tell how far behind the data is.
+ */
+export type Snapshot = { block: number; head: number; updatedAt: Date; json: string; html: string }
+
+/** Whether a snapshot is recent enough to serve. */
+export function isFresh(snapshot: Snapshot, now = Date.now()): boolean {
+  return now - snapshot.updatedAt.getTime() < MAX_AGE_MS && snapshot.head - snapshot.block < MAX_LAG_BLOCKS
+}
 
 type Options = Pick<Config, 'refreshSeconds' | 'minLiquidityUsd' | 'retentionDays'>
 
@@ -28,21 +40,24 @@ export function createSnapshots(chain: Chain, db: Db, indexer: Indexer, metadata
   }
 
   async function refresh() {
+    const { caughtUp, indexedBlock } = indexer.status()
     // Volumes are incomplete until the last 24 hours are indexed.
-    if (!indexer.status().caughtUp) return
+    if (!caughtUp) return
 
-    const block = await chain.finalizedBlock()
+    // Read reserves at the last indexed block, so that they match the trades.
+    const [block, head] = await Promise.all([chain.block(indexedBlock), chain.finalizedBlock()])
     const pools = await mapLimit(await chain.pools(block.hash), POOL_READ_CONCURRENCY, (pool) => readPool(pool, block))
     const now = Date.now()
     db.pruneBefore(now - options.retentionDays * DAY_MS)
     const rows = buildTickers(
       pools.filter((pool) => pool !== undefined),
-      db.tradesSince(now - DAY_MS),
+      db.tradesSince(now - DAY_MS, block.number),
       options.minLiquidityUsd,
     )
     const updatedAt = new Date(now)
     current = {
       block: block.number,
+      head: head.number,
       updatedAt,
       json: JSON.stringify(rows.map((row) => row.ticker)),
       html: await renderPage(rows, block.number, updatedAt),

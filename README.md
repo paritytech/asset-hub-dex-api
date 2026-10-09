@@ -8,7 +8,9 @@ CoinGecko DEX API for the pools of Polkadot Asset Hub's `pallet-asset-conversion
 |---|---|
 | `GET /tickers` | Pools with at least $1,000 of liquidity, as CoinGecko tickers. Cached for 30s. |
 | `GET /` | Stats page with the same data, for verifying the API. |
-| `GET /health` | 503 until the first snapshot is ready, or when the snapshot or indexing is more than 5 minutes (150 blocks) behind. |
+| `GET /health` | Indexing status. 503 when there is no up-to-date data. |
+
+Data is up to date when the last snapshot is less than 5 minutes old and its block is less than 150 blocks (about 5 minutes) behind the chain head. Otherwise all three endpoints return 503 rather than incomplete numbers.
 
 No `/orderbook` (the pools are AMMs) and no `/historical_trades` (optional).
 
@@ -52,7 +54,7 @@ One Node.js process with SQLite, reading the chain through [polkadot-api](https:
 
 - `src/chain` reads Asset Hub. Asset metadata is cached until a block changes it.
 - `src/indexer` follows finalized blocks and stores each swap's trades, one per pool. A fresh start backfills 43,200 blocks (at least 24h); a restart resumes where it stopped.
-- `src/tickers` rebuilds the tickers every minute from the reserves at the latest finalized block and the last 24h of trades.
+- `src/tickers` rebuilds the tickers every minute from the reserves and the last 24h of trades, both at the last indexed block.
 - `src/http` serves the latest tickers from memory, with [Hono](https://hono.dev).
 
 The RPC node must serve historical blocks for the backfill.

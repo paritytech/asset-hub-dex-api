@@ -26,7 +26,8 @@ export function openDb(path: string) {
     INSERT OR REPLACE INTO trades (block, event_index, hop, timestamp, asset, dot_amount, asset_amount)
     VALUES (?, ?, ?, ?, ?, ?, ?)`)
   const selectTrades = db.prepare(`
-    SELECT asset, dot_amount, asset_amount FROM trades WHERE timestamp >= ? ORDER BY block, event_index, hop`)
+    SELECT asset, dot_amount, asset_amount FROM trades
+    WHERE timestamp >= ? AND block <= ? ORDER BY block, event_index, hop`)
   const deleteTrades = db.prepare('DELETE FROM trades WHERE timestamp < ?')
   const getState = db.prepare('SELECT value FROM state WHERE key = ?')
   const setState = db.prepare('INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)')
@@ -52,9 +53,9 @@ export function openDb(path: string) {
       }
     },
 
-    /** Trades since `timestamp` (in milliseconds), oldest first. */
-    tradesSince(timestamp: number): Trade[] {
-      const rows = selectTrades.all(timestamp) as { asset: string; dot_amount: string; asset_amount: string }[]
+    /** Trades since `timestamp` (in milliseconds) up to block `untilBlock`, oldest first. */
+    tradesSince(timestamp: number, untilBlock: number): Trade[] {
+      const rows = selectTrades.all(timestamp, untilBlock) as { asset: string; dot_amount: string; asset_amount: string }[]
       return rows.map((row) => ({ asset: row.asset, dotAmount: BigInt(row.dot_amount), assetAmount: BigInt(row.asset_amount) }))
     },
 

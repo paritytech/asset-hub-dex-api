@@ -30,7 +30,7 @@ export async function connectChain(rpcUrls: string[]) {
   const codecs = await getTypedCodecs(ah)
 
   async function readBlock(number: number): Promise<BlockData> {
-    const at = await blockHash(number)
+    const { hash: at } = await block(number)
     const events = await api.query.System.Events.getValue({ at })
     const metadataChanged = events.some(
       ({ event }) =>
@@ -49,10 +49,10 @@ export async function connectChain(rpcUrls: string[]) {
   }
 
   // polkadot-api has no typed call for a block's hash by number.
-  async function blockHash(number: number): Promise<string> {
+  async function block(number: number): Promise<Block> {
     const hash = await client._request<string | null>('chain_getBlockHash', [number])
     if (!hash) throw new Error(`No hash for block #${number}`)
-    return hash
+    return { hash, number }
   }
 
   async function pools(at: string): Promise<Pool[]> {
@@ -88,6 +88,7 @@ export async function connectChain(rpcUrls: string[]) {
   return {
     finalizedBlock$: client.finalizedBlock$,
     finalizedBlock: (): Promise<Block> => client.getFinalizedBlock(),
+    block,
     readBlock,
     pools,
     assetInfo,
