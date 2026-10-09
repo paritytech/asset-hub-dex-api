@@ -1,13 +1,12 @@
 import { locationKey } from '../chain/assets.ts'
 import type { Block, Chain, Pool } from '../chain/client.ts'
 import type { MetadataCache } from '../chain/metadata.ts'
-import type { Config } from '../config.ts'
+import { WINDOW_MS, type Config } from '../config.ts'
 import { renderPage } from '../http/page.ts'
 import type { Db } from '../indexer/db.ts'
 import type { Indexer } from '../indexer/indexer.ts'
 import { buildTickers, type PoolReserves } from './tickers.ts'
 
-const DAY_MS = 24 * 60 * 60 * 1000
 /** Pools read in parallel. Bounds the RPC load however many pools exist. */
 const POOL_READ_CONCURRENCY = 10
 
@@ -26,7 +25,7 @@ export function isFresh(snapshot: Snapshot, now = Date.now()): boolean {
   return now - snapshot.updatedAt.getTime() < MAX_AGE_MS && snapshot.head - snapshot.block < MAX_LAG_BLOCKS
 }
 
-type Options = Pick<Config, 'refreshSeconds' | 'minLiquidityUsd' | 'retentionDays'>
+type Options = Pick<Config, 'refreshSeconds' | 'minLiquidityUsd'>
 
 /** Rebuilds the snapshot every `refreshSeconds`, once the indexer has caught up. */
 export function createSnapshots(chain: Chain, db: Db, indexer: Indexer, metadata: MetadataCache, options: Options) {
@@ -48,10 +47,10 @@ export function createSnapshots(chain: Chain, db: Db, indexer: Indexer, metadata
     const [block, head] = await Promise.all([chain.block(indexedBlock), chain.finalizedBlock()])
     const pools = await mapLimit(await chain.pools(block.hash), POOL_READ_CONCURRENCY, (pool) => readPool(pool, block))
     const now = Date.now()
-    db.pruneBefore(now - options.retentionDays * DAY_MS)
+    db.pruneBefore(now - WINDOW_MS)
     const rows = buildTickers(
       pools.filter((pool) => pool !== undefined),
-      db.tradesSince(now - DAY_MS, block.number),
+      db.tradesSince(now - WINDOW_MS, block.number),
       options.minLiquidityUsd,
     )
     const updatedAt = new Date(now)

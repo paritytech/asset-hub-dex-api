@@ -44,8 +44,17 @@ export async function connectChain(rpcUrls: string[]) {
     })
     if (trades.length === 0) return { number, trades: [], metadataChanged }
 
-    const timestamp = Number(await api.query.Timestamp.Now.getValue({ at }))
+    const timestamp = await timestampAt(at)
     return { number, trades: trades.map((trade) => ({ ...trade, timestamp })), metadataChanged }
+  }
+
+  /** A block's timestamp, in milliseconds. */
+  async function blockTimestamp(number: number): Promise<number> {
+    return timestampAt((await block(number)).hash)
+  }
+
+  async function timestampAt(at: string): Promise<number> {
+    return Number(await api.query.Timestamp.Now.getValue({ at }))
   }
 
   // polkadot-api has no typed call for a block's hash by number.
@@ -89,6 +98,7 @@ export async function connectChain(rpcUrls: string[]) {
     finalizedBlock$: client.finalizedBlock$,
     finalizedBlock: (): Promise<Block> => client.getFinalizedBlock(),
     block,
+    blockTimestamp,
     readBlock,
     pools,
     assetInfo,

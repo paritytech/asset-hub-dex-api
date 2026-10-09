@@ -53,11 +53,11 @@ No `/orderbook` (the pools are AMMs) and no `/historical_trades` (optional).
 One Node.js process with SQLite, reading the chain through [polkadot-api](https://papi.how):
 
 - `src/chain` reads Asset Hub. Asset metadata is cached until a block changes it.
-- `src/indexer` follows finalized blocks and stores each swap's trades, one per pool. A fresh start backfills 43,200 blocks (at least 24h); a restart resumes where it stopped.
+- `src/indexer` follows finalized blocks and stores each swap's trades, one per pool. A fresh start backfills the last 24h, found by block timestamp; a restart resumes where it stopped. Trades older than 24h are deleted.
 - `src/tickers` rebuilds the tickers every minute from the reserves and the last 24h of trades, both at the last indexed block.
 - `src/http` serves the latest tickers from memory, with [Hono](https://hono.dev).
 
-The RPC node must serve historical blocks for the backfill.
+The RPC node must keep a little over a day of block history, as any archive node does.
 
 ## Running
 
@@ -85,10 +85,8 @@ In production:
 | `PORT` | `3000` | |
 | `DB_PATH` | `data/trades.db` | |
 | `REFRESH_SECONDS` | `60` | Seconds between ticker rebuilds |
-| `BACKFILL_BLOCKS` | `43200` | Blocks indexed on a fresh start |
 | `CONCURRENCY` | `50` | Blocks read in parallel while catching up |
 | `MIN_LIQUIDITY_USD` | `1000` | Pools with less liquidity are left out |
-| `RETENTION_DAYS` | `7` | Days trades are kept |
 
 ## Development
 
