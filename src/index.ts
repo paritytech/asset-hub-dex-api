@@ -7,10 +7,10 @@ import { openDb } from './indexer/db.ts'
 import { createIndexer } from './indexer/indexer.ts'
 import { createSnapshots } from './tickers/snapshot.ts'
 
-const db = openDb(config.dbPath)
+const db = await openDb(config.databaseUrl)
 const chain = await connectChain(config.rpcUrls)
 const metadata = createMetadataCache(chain)
-const indexer = createIndexer(chain, db, { ...config, onMetadataChanged: metadata.invalidate })
+const indexer = await createIndexer(chain, db, { ...config, onMetadataChanged: metadata.invalidate })
 const snapshots = createSnapshots(chain, db, indexer, metadata, config)
 
 indexer.start()

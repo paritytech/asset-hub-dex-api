@@ -13,9 +13,9 @@ const BACKFILL_STEP = 1800
  * Indexes the trades of finalized blocks into the database. On a fresh start, or after a long
  * downtime, it starts just before the last 24 hours; otherwise after the last indexed block.
  */
-export function createIndexer(chain: Chain, db: Db, options: Options) {
+export async function createIndexer(chain: Chain, db: Db, options: Options) {
   let finalized = 0
-  let indexed = db.lastBlock() ?? 0
+  let indexed = (await db.lastBlock()) ?? 0
   /** A block from just before the 24 hours before startup. Older blocks are not needed. */
   let backfillStart: number | undefined
   let caughtUp = false
@@ -52,7 +52,7 @@ export function createIndexer(chain: Chain, db: Db, options: Options) {
         const blocks = await Promise.all(numbers.map((number) => chain.readBlock(number)))
 
         for (const block of blocks) if (block.metadataChanged) options.onMetadataChanged(block.number)
-        db.saveBlocks(blocks.flatMap((block) => block.trades), to)
+        await db.saveBlocks(blocks.flatMap((block) => block.trades), to)
         indexed = to
         logProgress()
       }
@@ -77,7 +77,7 @@ export function createIndexer(chain: Chain, db: Db, options: Options) {
   }
 }
 
-export type Indexer = ReturnType<typeof createIndexer>
+export type Indexer = Awaited<ReturnType<typeof createIndexer>>
 
 /**
  * A block from before `timestamp` (ms): steps back from `head` until it finds one. It may be up to

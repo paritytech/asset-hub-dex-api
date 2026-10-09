@@ -50,7 +50,7 @@ No `/orderbook` (the pools are AMMs) and no `/historical_trades` (optional).
 
 ## How it works
 
-One Node.js process with SQLite, reading the chain through [polkadot-api](https://papi.how):
+One Node.js process with PostgreSQL, reading the chain through [polkadot-api](https://papi.how):
 
 - `src/chain` reads Asset Hub. Asset metadata is cached until a block changes it.
 - `src/indexer` follows finalized blocks and stores each swap's trades, one per pool. A fresh start backfills the last 24h, found by block timestamp; a restart resumes where it stopped. Trades older than 24h are deleted.
@@ -61,7 +61,7 @@ The RPC node must keep a little over a day of block history, as any archive node
 
 ## Running
 
-Requires Node.js 24, which runs the TypeScript sources directly.
+Requires Node.js 24, which runs the TypeScript sources directly, and PostgreSQL. The tables are created on startup.
 
 ```sh
 npm install   # generates the chain descriptors from .papi/metadata
@@ -70,12 +70,12 @@ npm start     # the first start indexes 24h of swaps, about 6 minutes
 
 ```sh
 docker build -t asset-hub-dex-api .
-docker run -p 3000:3000 -v dex-data:/data asset-hub-dex-api
+docker run -p 3000:3000 -e DATABASE_URL=postgres://user:password@host/dex asset-hub-dex-api
 ```
 
 In production:
 
-- Keep `/data` on a persistent volume, so restarts skip the backfill.
+- Run a single instance. Restarts resume from the database, so only a fresh database backfills.
 - Restart the service when `/health` keeps failing, e.g. with a Kubernetes liveness probe. It can't recover from everything on its own.
 - Start those checks about 10 minutes after a fresh start, so they don't restart it mid-backfill.
 
@@ -83,7 +83,7 @@ In production:
 |---|---|---|
 | `RPC_URLS` | Parity, Dwellir | WebSocket endpoints, comma-separated, tried in order |
 | `PORT` | `3000` | |
-| `DB_PATH` | `data/trades.db` | |
+| `DATABASE_URL` | `postgres://localhost/dex` | PostgreSQL connection string |
 | `REFRESH_SECONDS` | `60` | Seconds between ticker rebuilds |
 | `CONCURRENCY` | `50` | Blocks read in parallel while catching up |
 | `MIN_LIQUIDITY_USD` | `1000` | Pools with less liquidity are left out |

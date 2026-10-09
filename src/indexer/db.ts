@@ -1,68 +1,61 @@
-import { mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import postgres from 'postgres'
 import type { IndexedTrade, Trade } from '../chain/trades.ts'
 
-/** Indexed trades and the last indexed block, in SQLite. Amounts are stored as text, as they exceed 64 bits. */
-export function openDb(path: string) {
-  mkdirSync(dirname(path), { recursive: true })
-  const db = new DatabaseSync(path)
-  db.exec(`
+/** Indexed trades and the last indexed block, in PostgreSQL. Amounts are NUMERIC, as they exceed 64 bits. */
+export async function openDb(url: string) {
+  // Notices are only "already exists, skipping" from the schema below.
+  const sql = postgres(url, { onnotice: () => {} })
+  await sql`
     CREATE TABLE IF NOT EXISTS trades (
       block INTEGER NOT NULL,
       event_index INTEGER NOT NULL,
       hop INTEGER NOT NULL,
-      timestamp INTEGER NOT NULL,
+      timestamp BIGINT NOT NULL,
       asset TEXT NOT NULL,
-      dot_amount TEXT NOT NULL,
-      asset_amount TEXT NOT NULL,
+      dot_amount NUMERIC NOT NULL,
+      asset_amount NUMERIC NOT NULL,
       PRIMARY KEY (block, event_index, hop)
-    );
-    CREATE INDEX IF NOT EXISTS trades_timestamp ON trades (timestamp);
-    CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-  `)
-
-  const insertTrade = db.prepare(`
-    INSERT OR REPLACE INTO trades (block, event_index, hop, timestamp, asset, dot_amount, asset_amount)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`)
-  const selectTrades = db.prepare(`
-    SELECT asset, dot_amount, asset_amount FROM trades
-    WHERE timestamp >= ? AND block <= ? ORDER BY block, event_index, hop`)
-  const deleteTrades = db.prepare('DELETE FROM trades WHERE timestamp < ?')
-  const getState = db.prepare('SELECT value FROM state WHERE key = ?')
-  const setState = db.prepare('INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)')
+    )`
+  await sql`CREATE INDEX IF NOT EXISTS trades_timestamp ON trades (timestamp)`
+  await sql`CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL)`
 
   return {
-    lastBlock(): number | undefined {
-      const row = getState.get('lastBlock') as { value: string } | undefined
+    async lastBlock(): Promise<number | undefined> {
+      const [row] = await sql<{ value: string }[]>`SELECT value FROM state WHERE key = 'lastBlock'`
       return row ? Number(row.value) : undefined
     },
 
     /** Stores the trades of a block range and marks the range as indexed, in one transaction. */
-    saveBlocks(trades: IndexedTrade[], lastBlock: number) {
-      db.exec('BEGIN')
-      try {
-        for (const t of trades) {
-          insertTrade.run(t.block, t.eventIndex, t.hop, t.timestamp, t.asset, String(t.dotAmount), String(t.assetAmount))
-        }
-        setState.run('lastBlock', String(lastBlock))
-        db.exec('COMMIT')
-      } catch (error) {
-        db.exec('ROLLBACK')
-        throw error
-      }
+    async saveBlocks(trades: IndexedTrade[], lastBlock: number) {
+      const rows = trades.map((t) => ({
+        block: t.block,
+        event_index: t.eventIndex,
+        hop: t.hop,
+        timestamp: t.timestamp,
+        asset: t.asset,
+        dot_amount: String(t.dotAmount),
+        asset_amount: String(t.assetAmount),
+      }))
+      await sql.begin(async (sql) => {
+        if (rows.length > 0) await sql`INSERT INTO trades ${sql(rows)} ON CONFLICT DO NOTHING`
+        await sql`
+          INSERT INTO state (key, value) VALUES ('lastBlock', ${String(lastBlock)})
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`
+      })
     },
 
     /** Trades since `timestamp` (in milliseconds) up to block `untilBlock`, oldest first. */
-    tradesSince(timestamp: number, untilBlock: number): Trade[] {
-      const rows = selectTrades.all(timestamp, untilBlock) as { asset: string; dot_amount: string; asset_amount: string }[]
+    async tradesSince(timestamp: number, untilBlock: number): Promise<Trade[]> {
+      const rows = await sql<{ asset: string; dot_amount: string; asset_amount: string }[]>`
+        SELECT asset, dot_amount, asset_amount FROM trades
+        WHERE timestamp >= ${timestamp} AND block <= ${untilBlock} ORDER BY block, event_index, hop`
       return rows.map((row) => ({ asset: row.asset, dotAmount: BigInt(row.dot_amount), assetAmount: BigInt(row.asset_amount) }))
     },
 
-    pruneBefore(timestamp: number) {
-      deleteTrades.run(timestamp)
+    async pruneBefore(timestamp: number) {
+      await sql`DELETE FROM trades WHERE timestamp < ${timestamp}`
     },
   }
 }
 
-export type Db = ReturnType<typeof openDb>
+export type Db = Awaited<ReturnType<typeof openDb>>

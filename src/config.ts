@@ -9,7 +9,8 @@ export const config = {
   /** WebSocket RPC endpoints, tried in order. */
   rpcUrls: (env.RPC_URLS ?? DEFAULT_RPC_URLS).split(',').map((url) => url.trim()).filter(Boolean),
   port: integer('PORT', 3000),
-  dbPath: env.DB_PATH ?? 'data/trades.db',
+  /** PostgreSQL connection string. */
+  databaseUrl: env.DATABASE_URL ?? 'postgres://localhost/dex',
   /** Seconds between snapshot refreshes. */
   refreshSeconds: integer('REFRESH_SECONDS', 60),
   /** Blocks read in parallel while catching up. */

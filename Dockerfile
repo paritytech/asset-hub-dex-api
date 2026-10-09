@@ -8,7 +8,6 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src src
 
-ENV NODE_ENV=production DB_PATH=/data/trades.db
-VOLUME /data
+ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["node", "src/index.ts"]

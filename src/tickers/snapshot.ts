@@ -47,10 +47,10 @@ export function createSnapshots(chain: Chain, db: Db, indexer: Indexer, metadata
     const [block, head] = await Promise.all([chain.block(indexedBlock), chain.finalizedBlock()])
     const pools = await mapLimit(await chain.pools(block.hash), POOL_READ_CONCURRENCY, (pool) => readPool(pool, block))
     const now = Date.now()
-    db.pruneBefore(now - WINDOW_MS)
+    await db.pruneBefore(now - WINDOW_MS)
     const rows = buildTickers(
       pools.filter((pool) => pool !== undefined),
-      db.tradesSince(now - WINDOW_MS, block.number),
+      await db.tradesSince(now - WINDOW_MS, block.number),
       options.minLiquidityUsd,
     )
     const updatedAt = new Date(now)
