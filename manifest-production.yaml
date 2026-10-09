@@ -3,6 +3,12 @@
 #
 # Host: polkadot-hub-dex.parity.io (traefik-external, public). CoinGecko polls
 # /tickers from the internet, so the ingress must stay external.
+#
+# HTTP-01: the production letsencrypt-dns01 issuer solves through Cloud DNS in
+# parity-prod, which only holds the parity-prod.parity.io zone. parity.io itself
+# is in Cloudflare, so DNS-01 fails with "No matching GoogleCloud domain found".
+productionCertIssuerType: http
+
 images:
   asset-hub-dex-api:
     http:
